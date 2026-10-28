@@ -25,6 +25,7 @@
       <div class="mode-switch" role="radiogroup" aria-label="โหมดการเล่น">
         <button class="mode-btn active" data-mode="title" role="radio" aria-checked="true">ทายชื่อเพลง</button>
         <button class="mode-btn" data-mode="artist" role="radio" aria-checked="false">ทายศิลปิน</button>
+        <button class="mode-btn" data-mode="lyrics" role="radio" aria-checked="false">ต่อเนื้อเพลง</button>
       </div>
 
       <section id="mpSection" class="mp-card">
@@ -88,6 +89,23 @@
       </div>
 
       <div class="choices" id="choices"></div>
+
+      <!-- โหมดต่อเนื้อเพลง -->
+      <div class="lyrics" id="lyricsBox">
+        <div class="ly-prompt" id="lyPrompt"></div>
+        <div class="ly-slots" id="lySlots"></div>
+        <form id="lyForm" class="custom-form">
+          <input id="lyInput" type="text" maxlength="200" placeholder="พิมพ์ท่อนต่อไปทั้งท่อน" autocomplete="off" lang="th">
+          <button type="submit" class="btn primary">ส่ง</button>
+        </form>
+        <ul class="ly-feed" id="lyFeed"></ul>
+        <div class="ly-hints">
+          <button type="button" class="ly-hint" data-hint="word">💡 เฉลย 1 คำ <span class="ly-votes"></span></button>
+          <button type="button" class="ly-hint" data-hint="title">🎵 ชื่อเพลง &amp; นักร้อง <span class="ly-votes"></span></button>
+          <button type="button" class="ly-hint" data-hint="giveup">🏳️ ยอมแพ้ <span class="ly-votes"></span></button>
+        </div>
+        <button type="button" class="btn ghost ly-skip" id="lySkipBtn" hidden>⏭ ข้ามข้อนี้ (โฮสต์)</button>
+      </div>
       <button class="btn ghost" id="nextBtn" hidden>ข้อต่อไป →</button>
       <ol class="live-board" id="liveBoard" hidden></ol>
     </section>
@@ -110,6 +128,7 @@
         <div class="mode-switch" role="radiogroup" aria-label="โหมดการเล่น">
           <button class="mode-btn active" data-mode="title" role="radio" aria-checked="true">ทายชื่อเพลง</button>
           <button class="mode-btn" data-mode="artist" role="radio" aria-checked="false">ทายศิลปิน</button>
+          <button class="mode-btn" data-mode="lyrics" role="radio" aria-checked="false">ต่อเนื้อเพลง</button>
         </div>
         <h2 class="section-title">เลือกหมวดเพื่อเริ่มเกม</h2>
         <div id="lobbyCategoryGrid" class="category-grid"></div>
@@ -156,12 +175,15 @@
     </section>
   </main>
 
-  <footer class="foot">ตัวอย่างเพลงจาก Apple Music / iTunes และ Deezer · ฟังเพลงเต็มได้ที่ลิงก์ในหน้าสรุป</footer>
+  <footer class="foot">ตัวอย่างเพลงจาก Apple Music / iTunes และ Deezer · เนื้อเพลงจาก LRCLIB · ฟังเพลงเต็มได้ที่ลิงก์ในหน้าสรุป</footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
   <script src="categories.js"></script>
+  <script src="lyrics-index.js"></script>
+  <script src="lyrics-text.js"></script>
   <script src="app.js"></script>
+  <script src="lyrics.js"></script>
   <script src="multiplayer.js"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@ const VERSION_WORDS = /[\(\[-][^\)\]]*\b(live|acoustic|remix|version|ver\.?|sped
 // ---------- fetch layer: iTunes + Deezer ----------
 
 const memoryCache = {};
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 function storageGet(key) {
   try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; }
@@ -66,6 +66,7 @@ async function fetchItunes(term) {
       artist: name,
       art: (t.artworkUrl100 || "").replace("100x100", "400x400"),
       year: Number((t.releaseDate || "").slice(0, 4)) || null,
+      duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : null,
       preview: t.previewUrl,
       url: t.trackViewUrl,
     }));
@@ -100,6 +101,7 @@ function deezerTracks(data, artist) {
       key: titleKey(t.title_short || t.title),
       artist: artist.name,
       art: t.album?.cover_big || t.album?.cover_medium || "",
+      duration: t.duration || null,
       preview: t.preview,
       url: t.link,
     }));
@@ -229,7 +231,7 @@ function setBest(source, mode, score) {
 // ---------- state ----------
 
 const state = {
-  mode: "title",       // โหมดที่เลือกไว้: "title" | "artist"
+  mode: "title",       // โหมดที่เลือกไว้: "title" | "artist" | "lyrics"
   playMode: "title",   // โหมดที่ใช้จริงในเกมนี้
   source: null,        // { id, label, artists[] }
   rounds: [],
@@ -290,10 +292,12 @@ function renderCategories(grid = $("#categoryGrid"), onPick = source => startGam
     btn.className = "cat-card";
     btn.style.setProperty("--c", c.color);
     const best = getBest(c.id, state.mode);
+    const lyricsCount = state.mode === "lyrics" ? lyricsSongCount(categorySource(c)) : null;
     btn.innerHTML = `
       <span class="cat-emoji">${c.emoji}</span>
       <span class="cat-name"></span>
       <span class="cat-desc"></span>
+      ${lyricsCount !== null ? `<span class="cat-best">📝 มีเนื้อ ${lyricsCount} เพลง</span>` : ""}
       ${best ? `<span class="cat-best">🏆 สถิติ ${best.toLocaleString()}</span>` : ""}`;
     btn.querySelector(".cat-name").textContent = c.name;
     btn.querySelector(".cat-desc").textContent = c.desc;
@@ -363,6 +367,7 @@ function setMode(mode) {
     b.setAttribute("aria-checked", String(on));
   });
   renderCategories();
+  if (mp.isHost && mp.phase === "lobby") renderCategories($("#lobbyCategoryGrid"), hostStart, hostSpin);
 }
 
 document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -383,16 +388,16 @@ $("#customForm").addEventListener("submit", e => {
 
 // ---------- game setup ----------
 
-function pickRounds(pool) {
+function pickRounds(pool, limit = ROUNDS) {
   // วนเลือกทีละศิลปินให้หลากหลาย ในแต่ละศิลปินหยิบเพลงยอดนิยม (hot) ก่อน
   const byArtist = {};
   for (const t of pool) (byArtist[t.artist] ||= []).push(t);
   const queues = Object.values(byArtist).map(songs =>
     [...shuffle(songs.filter(t => t.hot)), ...shuffle(songs.filter(t => !t.hot))]);
   const picked = [];
-  while (picked.length < ROUNDS && queues.some(q => q.length)) {
+  while (picked.length < limit && queues.some(q => q.length)) {
     for (const q of shuffle(queues)) {
-      if (picked.length >= ROUNDS) break;
+      if (picked.length >= limit) break;
       if (q.length) picked.push(q.shift());
     }
   }
@@ -414,6 +419,7 @@ function makeChoices(song, pool, mode) {
 
 // ดึงเพลงและสร้างโจทย์ 10 ข้อ คืนค่า { rounds, mode } หรือ null ถ้าเพลงไม่พอ
 async function loadRounds(source, wantedMode) {
+  if (wantedMode === "lyrics") return loadLyricsRounds(source);
   showScreen("loading");
   $("#loadingText").textContent = "กำลังรวบรวมเพลง...";
 
@@ -455,6 +461,7 @@ function beginRounds(rounds, mode, label, { autoplay = true } = {}) {
   $("#categoryLabel").textContent = label;
   $("#scoreLabel").textContent = "0";
   $("#choices").innerHTML = "";
+  $("#screen-game").classList.toggle("lyrics-mode", mode === "lyrics");
   $("#revealText").textContent = state.multi ? "เตรียมตัว..." : "";
   showScreen("game");
   if (autoplay) playRound();
@@ -471,6 +478,7 @@ async function startGame(source) {
 // ---------- game loop ----------
 
 function playRound() {
+  if (state.playMode === "lyrics") { playLyricsRound(); return; }
   const round = state.rounds[state.index];
   const { song } = round;
   state.answered = false;

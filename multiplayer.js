@@ -88,6 +88,7 @@ async function mpConnect(code, asHost) {
     .on("broadcast", { event: "round" }, ({ payload }) => onRound(payload))
     .on("broadcast", { event: "answer" }, ({ payload }) => onAnswer(payload))
     .on("broadcast", { event: "reveal" }, ({ payload }) => onReveal(payload))
+    .on("broadcast", { event: "ly" }, ({ payload }) => onLyricsEvent(payload))
     .on("broadcast", { event: "end" }, () => onEnd());
 
   await new Promise((resolve, reject) => {
@@ -143,8 +144,14 @@ function onPresenceSync() {
     }, 3000);
   }
 
-  // โฮสต์: ถ้าคนที่ยังไม่ตอบออกจากห้องไป ข้อนี้อาจครบแล้ว
-  if (mp.isHost && mp.phase === "playing") hostCheckAllAnswered(mp.roundIndex);
+  if (mp.phase === "playing" && state.playMode === "lyrics") {
+    // จำนวนคนเปลี่ยน = เกณฑ์โหวตตัวช่วยเปลี่ยน
+    if (state.ly && !state.answered) renderLyHints();
+    lyCheckVotes();
+  } else if (mp.isHost && mp.phase === "playing") {
+    // โฮสต์: ถ้าคนที่ยังไม่ตอบออกจากห้องไป ข้อนี้อาจครบแล้ว
+    hostCheckAllAnswered(mp.roundIndex);
+  }
 }
 
 // ---------- lobby UI ----------
@@ -222,6 +229,7 @@ function hostStartRound(index) {
   if (!mp.channel) return;
   mp.roundIndex = index;
   mpSend("round", { index });
+  if (state.playMode === "lyrics") return; // โหมดต่อเนื้อเพลงไม่จับเวลา จบเมื่อมีคนถูก ยอมแพ้ หรือโฮสต์ข้าม
   const songWait = ROUND_SECONDS * 1000 + MP_GRACE_MS;
   mpLater(() => hostReveal(index), songWait);
 }
@@ -233,14 +241,15 @@ function hostCheckAllAnswered(index) {
   if (waiting.length === 0) hostReveal(index);
 }
 
-function hostReveal(index) {
+// extra = ผลของข้อในโหมดต่อเนื้อเพลง { winner, name, reason }
+function hostReveal(index, extra = {}) {
   if (!mp.channel || mp.revealed[index] || index !== mp.roundIndex) return;
   mp.revealed[index] = true;
-  mpSend("reveal", { index });
+  mpSend("reveal", { index, ...extra });
   mpLater(() => {
     if (index + 1 < state.rounds.length) hostStartRound(index + 1);
     else mpSend("end");
-  }, REVEAL_MS + 1000);
+  }, state.playMode === "lyrics" ? LY_REVEAL_MS : REVEAL_MS + 1000);
 }
 
 // ---------- game flow (ทุกคน) ----------
@@ -293,8 +302,20 @@ function addRoundPoints(id, points) {
   if (points > 0) t.correct++;
 }
 
-function onReveal({ index }) {
+function onReveal(payload) {
+  const { index } = payload;
   if (mp.phase !== "playing") return;
+  if (state.playMode === "lyrics") {
+    const done = (mp.answers[index] ||= new Map());
+    if (!done.scored) {
+      done.scored = true;
+      if (mp.totals[payload.winner]) addRoundPoints(payload.winner, 1);
+    }
+    mp.revealed[index] = true;
+    lyricsReveal(payload);
+    renderLiveBoard();
+    return;
+  }
   // บวกคะแนนของข้อนี้ให้ทุกคนพร้อมกันตอนเฉลย จะได้ไม่รู้ผลก่อนเพื่อนตอบครบ
   // (โฮสต์ตั้ง revealed ไว้ก่อนแล้วใน hostReveal จึงใช้ scored แยกกันบวกซ้ำ)
   const answered = (mp.answers[index] ||= new Map());
