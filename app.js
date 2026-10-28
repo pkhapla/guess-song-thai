@@ -83,20 +83,28 @@ async function fetchArtist(term) {
 }
 
 // ดึงหลายศิลปินแบบขนานทีละ 4
+// ตัดเพลงซ้ำข้ามศิลปินด้วย (เพลงที่ร้องร่วมกันจะโผล่ในผลค้นหาของทั้งสองคน หรือชื่อเพลงชนกัน)
+// เพื่อไม่ให้ 1 เกมมีเพลงซ้ำ และตัวเลือกชื่อเพลงไม่ซ้ำกันเอง
 async function buildPool(artists, onProgress) {
   const all = [];
+  const seenKeys = new Set();
   let done = 0;
-  const queue = [...artists];
+  const queue = [...new Map(artists.map(a => [a.trim().toLowerCase(), a])).values()];
+  const total = queue.length;
   async function worker() {
     while (queue.length) {
       const a = queue.shift();
       try {
         const r = await fetchArtist(a);
-        all.push(...r.tracks);
+        for (const t of r.tracks) {
+          if (seenKeys.has(t.key)) continue;
+          seenKeys.add(t.key);
+          all.push(t);
+        }
       } catch (e) {
         console.warn("fetch failed", a, e);
       }
-      onProgress && onProgress(++done, artists.length);
+      onProgress && onProgress(++done, total);
     }
   }
   await Promise.all([worker(), worker(), worker(), worker()]);
