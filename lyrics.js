@@ -264,10 +264,10 @@ function lyCheckVotes() {
     lySend({ type: "hint", hint: "title" });
   }
   if (state.ly.votes.word.size && lyVoteCount("word") >= lyNeeded("word")) {
-    const words = state.rounds[state.index].words;
-    const next = words.findIndex((_, i) => !state.ly.open.has(i));
+    // สุ่มเปิดคำที่ยังไม่มีใครเปิด (โฮสต์สุ่มแล้วส่ง index ไป ทุกเครื่องจึงได้คำเดียวกัน)
+    const closed = state.rounds[state.index].words.map((_, i) => i).filter(i => !state.ly.open.has(i));
     state.ly.votes.word.clear();
-    if (next >= 0) lySend({ type: "hint", hint: "word", word: next });
+    if (closed.length) lySend({ type: "hint", hint: "word", word: sample(closed, 1)[0] });
   }
 }
 
