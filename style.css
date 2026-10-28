@@ -141,6 +141,35 @@ main {
 .btn.ghost { background: var(--card); }
 .btn.ghost:hover { background: var(--card-hi); }
 
+.cat-random { outline: 2px dashed rgba(255, 255, 255, .25); outline-offset: -2px; }
+
+/* ---------- Spin (สุ่มหมวด) ---------- */
+.spin { text-align: center; padding: 40px 0; }
+.spin-title { font-size: 1.5rem; margin: 0 0 24px; }
+.spin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.spin-chip {
+  position: relative;
+  padding: 16px 10px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 2px solid transparent;
+  opacity: .45;
+  transition: opacity .1s, transform .1s, border-color .1s;
+}
+.spin-chip .cat-emoji { display: block; }
+.spin-name { display: block; font-weight: 700; margin-top: 4px; font-size: .95rem; }
+.spin-chip.hit { opacity: 1; transform: scale(1.06); border-color: var(--c); background: var(--card-hi); }
+.spin-grid.done .spin-chip:not(.win) { opacity: .2; transform: none; border-color: transparent; }
+.spin-chip.win { opacity: 1; border-color: var(--c); box-shadow: 0 0 28px var(--c); animation: win-pop .5s ease-out; }
+@keyframes win-pop { 0% { transform: scale(1); } 50% { transform: scale(1.18); } 100% { transform: scale(1.08); } }
+.spin-result { font-size: 1.4rem; font-weight: 700; color: var(--accent2); min-height: 1.6em; margin: 24px 0 0; }
+
 /* ---------- Loading ---------- */
 .loader { text-align: center; padding: 120px 0; color: var(--muted); }
 .eq { display: flex; gap: 6px; justify-content: center; height: 48px; align-items: flex-end; margin-bottom: 18px; }

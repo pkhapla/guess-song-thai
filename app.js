@@ -164,8 +164,30 @@ function ensureAudio() {
 
 // ---------- home ----------
 
-function renderCategories(grid = $("#categoryGrid"), onPick = source => startGame(source)) {
+function categorySource(c) {
+  return { id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists };
+}
+
+// onRandom: ถ้าไม่ส่งมา จะสุ่มหมวดแล้วเล่นคนเดียว (ห้องเล่นกับเพื่อนส่งของตัวเองมาเพื่อให้ทุกคนเห็นการสุ่ม)
+function renderCategories(grid = $("#categoryGrid"), onPick = source => startGame(source), onRandom) {
   grid.innerHTML = "";
+  const rnd = document.createElement("button");
+  rnd.className = "cat-card cat-random";
+  rnd.style.setProperty("--c", "#ff4d8d");
+  rnd.innerHTML = `
+      <span class="cat-emoji">🎲</span>
+      <span class="cat-name">สุ่มหมวด</span>
+      <span class="cat-desc">ให้ดวงเลือกหมวดให้ ลุ้นไปด้วยกัน</span>`;
+  rnd.addEventListener("click", async () => {
+    if (spinning) return;
+    ensureAudio();
+    const target = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    if (onRandom) { onRandom(target); return; }
+    await spinCategory(target.id);
+    onPick(categorySource(target));
+  });
+  grid.appendChild(rnd);
+
   for (const c of CATEGORIES) {
     const btn = document.createElement("button");
     btn.className = "cat-card";
@@ -180,10 +202,60 @@ function renderCategories(grid = $("#categoryGrid"), onPick = source => startGam
     btn.querySelector(".cat-desc").textContent = c.desc;
     btn.addEventListener("click", () => {
       ensureAudio();
-      onPick({ id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists });
+      onPick(categorySource(c));
     });
     grid.appendChild(btn);
   }
+}
+
+// ---------- สุ่มหมวด ----------
+
+let spinning = false;
+const SPIN_LAPS = 3;
+
+// เล่นแอนิเมชันวงล้อวิ่งผ่านทุกหมวดแล้วหยุดที่ targetId
+// ลำดับและจังหวะขึ้นกับ targetId อย่างเดียว ทุกเครื่องในห้องจึงเห็นเหมือนกัน
+function spinCategory(targetId) {
+  const target = CATEGORIES.findIndex(c => c.id === targetId);
+  if (target < 0) return Promise.resolve();
+  spinning = true;
+
+  const grid = $("#spinGrid");
+  grid.innerHTML = "";
+  const chips = CATEGORIES.map(c => {
+    const el = document.createElement("div");
+    el.className = "spin-chip";
+    el.style.setProperty("--c", c.color);
+    el.innerHTML = `<span class="cat-emoji">${c.emoji}</span><span class="spin-name"></span>`;
+    el.querySelector(".spin-name").textContent = c.name;
+    grid.appendChild(el);
+    return el;
+  });
+  $("#spinTitle").textContent = "🎲 กำลังสุ่มหมวด...";
+  $("#spinResult").textContent = "";
+  showScreen("spin");
+
+  const steps = SPIN_LAPS * CATEGORIES.length + target;
+  return new Promise(resolve => {
+    let i = 0;
+    const tick = () => {
+      chips.forEach((el, k) => el.classList.toggle("hit", k === i % chips.length));
+      if (i === steps) {
+        const c = CATEGORIES[target];
+        chips[target].classList.add("win");
+        grid.classList.add("done");
+        $("#spinTitle").textContent = "🎉 ได้หมวดนี้!";
+        $("#spinResult").textContent = `${c.emoji} ${c.name}`;
+        setTimeout(() => { grid.classList.remove("done"); spinning = false; resolve(); }, 1400);
+        return;
+      }
+      i++;
+      // เริ่มเร็วแล้วค่อยๆ ช้าลงตอนใกล้หยุด
+      const t = i / steps;
+      setTimeout(tick, 55 + 420 * t ** 3);
+    };
+    tick();
+  });
 }
 
 function setMode(mode) {

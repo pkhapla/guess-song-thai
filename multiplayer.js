@@ -16,7 +16,7 @@ const mp = {
   name: "",
   players: {},     // คนที่อยู่ในห้องตอนนี้ { id: { name, host } }
   totals: {},      // คะแนนรวมของเกมนี้ { id: { name, score, correct } }
-  answers: {},     // { roundIndex: Set(playerId) }
+  answers: {},     // { roundIndex: Map(playerId -> points) } คะแนนจะถูกบวกตอนเฉลยเท่านั้น
   phase: "lobby",  // lobby | loading | playing | done
   roundIndex: -1,
   revealed: {},
@@ -83,6 +83,7 @@ async function mpConnect(code, asHost) {
       if (mp.isHost) mpSend("lobby", { phase: mp.phase, label: state.source?.label || "" });
     })
     .on("broadcast", { event: "lobby" }, ({ payload }) => onLobby(payload))
+    .on("broadcast", { event: "spin" }, ({ payload }) => onSpin(payload))
     .on("broadcast", { event: "start" }, ({ payload }) => onStart(payload))
     .on("broadcast", { event: "round" }, ({ payload }) => onRound(payload))
     .on("broadcast", { event: "answer" }, ({ payload }) => onAnswer(payload))
@@ -160,7 +161,7 @@ function showLobby() {
   $("#lobbyHost").hidden = !mp.isHost;
   $("#lobbyGuest").hidden = mp.isHost;
   $("#lobbyStatus").textContent = "รอโฮสต์เลือกหมวดเพลง...";
-  if (mp.isHost) renderCategories($("#lobbyCategoryGrid"), hostStart);
+  if (mp.isHost) renderCategories($("#lobbyCategoryGrid"), hostStart, hostSpin);
   renderPlayers();
   showScreen("lobby");
 }
@@ -209,6 +210,14 @@ async function hostStart(source) {
   mpLater(() => hostStartRound(0), MP_START_DELAY);
 }
 
+// โฮสต์สุ่มหมวด: บอกทุกคนให้เล่นแอนิเมชันเดียวกัน แล้วค่อยเริ่มโหลดเพลง
+async function hostSpin(target) {
+  mpSend("spin", { id: target.id });
+  await spinCategory(target.id);
+  if (!mp.channel) return; // ออกจากห้องระหว่างสุ่ม
+  hostStart(categorySource(target));
+}
+
 function hostStartRound(index) {
   if (!mp.channel) return;
   mp.roundIndex = index;
@@ -219,7 +228,7 @@ function hostStartRound(index) {
 
 function hostCheckAllAnswered(index) {
   if (index < 0 || mp.revealed[index]) return;
-  const answered = mp.answers[index] || new Set();
+  const answered = mp.answers[index] || new Map();
   const waiting = Object.keys(mp.players).filter(id => mp.totals[id] && !answered.has(id));
   if (waiting.length === 0) hostReveal(index);
 }
@@ -235,6 +244,13 @@ function hostReveal(index) {
 }
 
 // ---------- game flow (ทุกคน) ----------
+
+async function onSpin({ id }) {
+  if (mp.isHost || mp.phase !== "lobby") return;
+  await spinCategory(id);
+  // กลับไปหน้ารอในห้อง (ถ้าเกมยังไม่เริ่มหรือยังไม่ได้ออกจากห้อง)
+  if (mp.channel && $("#screen-spin").classList.contains("active")) showScreen("lobby");
+}
 
 function onStart({ rounds, mode, label }) {
   mp.phase = "playing";
@@ -262,20 +278,33 @@ function mpSendAnswer(index, points) {
 }
 
 function onAnswer({ index, id, name, points }) {
-  const answered = (mp.answers[index] ||= new Set());
+  const answered = (mp.answers[index] ||= new Map());
   if (answered.has(id)) return;
-  answered.add(id);
-  const t = (mp.totals[id] ||= { name, score: 0, correct: 0 });
-  t.score += points;
-  if (points > 0) t.correct++;
+  answered.set(id, points);
+  mp.totals[id] ||= { name, score: 0, correct: 0 };
+  if (answered.scored) addRoundPoints(id, points); // คำตอบมาถึงหลังเฉลย (เน็ตช้า)
   renderLiveBoard();
   if (mp.isHost) hostCheckAllAnswered(index);
 }
 
+function addRoundPoints(id, points) {
+  const t = mp.totals[id];
+  t.score += points;
+  if (points > 0) t.correct++;
+}
+
 function onReveal({ index }) {
-  if (mp.phase !== "playing" || index !== state.index || !state.rounds.length) return;
-  if (!state.answered) recordAnswer(null);
+  if (mp.phase !== "playing") return;
+  // บวกคะแนนของข้อนี้ให้ทุกคนพร้อมกันตอนเฉลย จะได้ไม่รู้ผลก่อนเพื่อนตอบครบ
+  // (โฮสต์ตั้ง revealed ไว้ก่อนแล้วใน hostReveal จึงใช้ scored แยกกันบวกซ้ำ)
+  const answered = (mp.answers[index] ||= new Map());
+  if (!answered.scored) {
+    answered.scored = true;
+    answered.forEach((points, id) => addRoundPoints(id, points));
+  }
   mp.revealed[index] = true;
+  if (index !== state.index || !state.rounds.length) { renderLiveBoard(); return; }
+  if (!state.answered) recordAnswer(null);
   revealRound();
   renderLiveBoard();
 }
@@ -298,7 +327,7 @@ function renderLiveBoard() {
   const board = $("#liveBoard");
   if (!board || !state.multi || mp.phase !== "playing") return;
   board.innerHTML = "";
-  const answered = mp.answers[state.index] || new Set();
+  const answered = mp.answers[state.index] || new Map();
   rankedPlayers().forEach((p, i) => {
     const li = document.createElement("li");
     li.className = "live-row" + (p.id === mp.playerId ? " me" : "") + (mp.players[p.id] ? "" : " gone");
