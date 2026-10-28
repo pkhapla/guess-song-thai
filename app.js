@@ -3,14 +3,15 @@
 const ROUNDS = 10;
 const ROUND_SECONDS = 15;
 const REVEAL_MS = 2600;
-const ARTISTS_PER_GAME = 8; // จำกัดจำนวนศิลปินที่ดึงต่อเกม เพื่อไม่ให้โดน iTunes rate limit
+const ARTISTS_PER_GAME = 8; // จำกัดจำนวนศิลปินที่ดึงต่อเกม เพื่อไม่ให้โดน rate limit
 const BAD_WORDS = /karaoke|instrumental|backing track|minus one|cover|คาราโอเกะ|ดนตรี/i;
 // เวอร์ชันพิเศษของเพลงเดิม (ข้ามไป ใช้ต้นฉบับแทน)
 const VERSION_WORDS = /[\(\[-][^\)\]]*\b(live|acoustic|remix|version|ver\.?|sped up|slowed|remaster(ed)?|demo|unplugged|orchestra|piano)\b/i;
 
-// ---------- iTunes fetch layer ----------
+// ---------- fetch layer: iTunes + Deezer ----------
 
 const memoryCache = {};
+const CACHE_VERSION = 3;
 
 function storageGet(key) {
   try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; }
@@ -31,13 +32,10 @@ function titleKey(title) {
   return cleanTitle(title).replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "").toLowerCase().replace(/[\s'".,!?-]/g, "");
 }
 
-// ดึงเพลงของศิลปินหนึ่งคน คืนค่า { name, tracks[] }
-async function fetchArtist(term) {
-  const cacheKey = "artist:" + term.toLowerCase();
-  if (memoryCache[cacheKey]) return memoryCache[cacheKey];
-  const stored = storageGet(cacheKey);
-  if (stored) return (memoryCache[cacheKey] = stored);
+const isUsable = title => !BAD_WORDS.test(title) && !VERSION_WORDS.test(title);
 
+// iTunes: คืนค่า { name, tracks[] }
+async function fetchItunes(term) {
   const url = "https://itunes.apple.com/search?" + new URLSearchParams({
     term, country: "th", media: "music", entity: "song", attribute: "artistTerm", limit: "60",
   });
@@ -46,8 +44,7 @@ async function fetchArtist(term) {
   const data = await res.json();
 
   const results = data.results.filter(t =>
-    t.kind === "song" && t.previewUrl && !BAD_WORDS.test(t.trackName) && !BAD_WORDS.test(t.collectionName || "") &&
-    !VERSION_WORDS.test(t.trackName));
+    t.kind === "song" && t.previewUrl && isUsable(t.trackName) && !BAD_WORDS.test(t.collectionName || ""));
 
   // หาชื่อศิลปินหลัก: ถ้าคำค้นตรงกับชื่อศิลปินก็ใช้ ถ้าไม่ (เช่นค้นเป็นภาษาไทย) ใช้ศิลปินเดี่ยวที่เจอบ่อยสุด
   const q = term.toLowerCase();
@@ -57,27 +54,115 @@ async function fetchArtist(term) {
   const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   const exact = results.find(t => t.artistName.toLowerCase() === q); // เช่น "Whal & Dolph" ที่มี & ในชื่อวง
   const name = exact ? exact.artistName : ranked.find(n => n.toLowerCase().includes(q)) || ranked[0];
-  if (!name) return (memoryCache[cacheKey] = { name: term, tracks: [] });
+  if (!name) return { name: null, tracks: [] };
 
   const lowerName = name.toLowerCase();
-  const seen = new Set();
-  const tracks = [];
-  for (const t of results) {
-    if (!t.artistName.toLowerCase().includes(lowerName)) continue;
-    const key = titleKey(t.trackName);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    tracks.push({
-      id: t.trackId,
+  const tracks = results
+    .filter(t => t.artistName.toLowerCase().includes(lowerName))
+    .map(t => ({
+      id: "it" + t.trackId,
       title: cleanTitle(t.trackName),
-      key,
+      key: titleKey(t.trackName),
       artist: name,
       art: (t.artworkUrl100 || "").replace("100x100", "400x400"),
       preview: t.previewUrl,
       url: t.trackViewUrl,
-    });
+    }));
+  return { name, tracks };
+}
+
+// Deezer ไม่เปิด CORS เลยต้องเรียกแบบ JSONP
+let jsonpSeq = 0;
+function deezer(path) {
+  return new Promise((resolve, reject) => {
+    const cb = `__dz${Date.now()}_${++jsonpSeq}`;
+    const script = document.createElement("script");
+    const cleanup = () => { clearTimeout(timer); delete window[cb]; script.remove(); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error("Deezer timeout")); }, 8000);
+    window[cb] = data => {
+      cleanup();
+      data && data.error ? reject(new Error("Deezer " + data.error.message)) : resolve(data);
+    };
+    script.onerror = () => { cleanup(); reject(new Error("Deezer load error")); };
+    script.src = `https://api.deezer.com${path}${path.includes("?") ? "&" : "?"}output=jsonp&callback=${cb}`;
+    document.head.appendChild(script);
+  });
+}
+
+function deezerTracks(data, artist) {
+  return (data.data || [])
+    .filter(t => t.readable !== false && t.preview && isUsable(t.title) &&
+      (t.artist.id === artist.id || (t.contributors || []).some(c => c.id === artist.id)))
+    .map(t => ({
+      id: "dz" + t.id,
+      title: cleanTitle(t.title_short || t.title),
+      key: titleKey(t.title_short || t.title),
+      artist: artist.name,
+      art: t.album?.cover_big || t.album?.cover_medium || "",
+      preview: t.preview,
+      url: t.link,
+    }));
+}
+
+// Deezer: เลือกศิลปินที่ชื่อตรงที่สุด แล้วดึงเพลงยอดนิยม (top) ของศิลปินนั้น
+// knownKeys = ชื่อเพลงจาก iTunes ใช้ยืนยันว่าเป็นศิลปินคนเดียวกัน (กันวงต่างประเทศชื่อซ้ำ)
+async function fetchDeezer(term, knownKeys) {
+  const found = await deezer(`/search/artist?q=${encodeURIComponent(term)}&limit=10`);
+  const q = term.toLowerCase();
+  const list = found.data || [];
+  const exact = list.filter(a => a.name.toLowerCase() === q).sort((a, b) => b.nb_fan - a.nb_fan);
+  const candidates = (exact.length ? exact : list.filter(a => a.name.toLowerCase().includes(q))).slice(0, 2);
+  if (!candidates.length && !knownKeys.size && list[0]) candidates.push(list[0]); // ค้นภาษาไทยที่ iTunes ไม่เจอ
+
+  for (const artist of candidates) {
+    const top = await deezer(`/artist/${artist.id}/top?limit=50`);
+    const tracks = deezerTracks(top, artist);
+    if (!knownKeys.size) return { name: artist.name, tracks };
+    const overlap = tracks.filter(t => knownKeys.has(t.key)).length;
+    if (overlap >= 2) return { name: artist.name, tracks };
   }
-  const out = { name, tracks };
+  return { name: null, tracks: [] };
+}
+
+// วันหมดอายุลิงก์ตัวอย่างเพลงของ Deezer (มี exp ใน URL ราว 15 นาที)
+function previewExpiry(tracks) {
+  let min = Infinity;
+  for (const t of tracks) {
+    const m = /exp=(\d+)/.exec(t.preview);
+    if (m) min = Math.min(min, Number(m[1]) * 1000);
+  }
+  return min === Infinity ? null : min - 6 * 60 * 1000  // เผื่อเวลาเล่นจบเกม;
+}
+
+// ดึงเพลงของศิลปินหนึ่งคนจากทั้ง iTunes และ Deezer แล้วรวมกัน คืนค่า { name, tracks[] }
+async function fetchArtist(term) {
+  const cacheKey = `artist:v${CACHE_VERSION}:` + term.toLowerCase();
+  const fresh = c => c && (!c.expires || Date.now() < c.expires);
+  if (fresh(memoryCache[cacheKey])) return memoryCache[cacheKey];
+  const stored = storageGet(cacheKey);
+  if (fresh(stored)) return (memoryCache[cacheKey] = stored);
+
+  const [main, ...aliases] = term.split("|").map(s => s.trim());
+  const it = await fetchItunes(main).catch(e => { console.warn("iTunes", main, e); return { name: null, tracks: [] }; });
+  const knownKeys = new Set(it.tracks.map(t => t.key));
+  let dz = { name: null, tracks: [] };
+  for (const q of [main, ...aliases]) {
+    dz = await fetchDeezer(q, knownKeys).catch(e => { console.warn("Deezer", q, e); return dz; });
+    if (dz.tracks.length) break;
+  }
+
+  // ใช้ชื่อศิลปินจาก iTunes เป็นหลัก แล้วเติมเพลงจาก Deezer ที่ยังไม่มี (เพลงซ้ำใช้ของ iTunes เพราะลิงก์ไม่หมดอายุ)
+  // เพลงที่อยู่ในเพลงยอดนิยมของ Deezer ติดป้าย hot ไว้ ให้สุ่มเป็นโจทย์ก่อน
+  const hotKeys = new Set(dz.tracks.map(t => t.key));
+  const name = it.name || dz.name || main;
+  const seen = new Set();
+  const tracks = [];
+  for (const t of [...it.tracks, ...dz.tracks]) {
+    if (!t.key || seen.has(t.key)) continue;
+    seen.add(t.key);
+    tracks.push({ ...t, artist: name, hot: hotKeys.has(t.key) });
+  }
+  const out = { name, tracks, expires: previewExpiry(tracks) };
   storageSet(cacheKey, out);
   return (memoryCache[cacheKey] = out);
 }
@@ -287,18 +372,19 @@ $("#customForm").addEventListener("submit", e => {
 // ---------- game setup ----------
 
 function pickRounds(pool) {
-  // เลือกเพลงให้หลากหลาย: ศิลปินละไม่เกิน 2 เพลง (ถ้าทำได้)
-  const artists = new Set(pool.map(t => t.artist));
-  const maxPer = artists.size >= 5 ? 2 : ROUNDS;
+  // วนเลือกทีละศิลปินให้หลากหลาย ในแต่ละศิลปินหยิบเพลงยอดนิยม (hot) ก่อน
+  const byArtist = {};
+  for (const t of pool) (byArtist[t.artist] ||= []).push(t);
+  const queues = Object.values(byArtist).map(songs =>
+    [...shuffle(songs.filter(t => t.hot)), ...shuffle(songs.filter(t => !t.hot))]);
   const picked = [];
-  const count = {};
-  for (const t of shuffle(pool)) {
-    if (picked.length >= ROUNDS) break;
-    if ((count[t.artist] || 0) >= maxPer) continue;
-    count[t.artist] = (count[t.artist] || 0) + 1;
-    picked.push(t);
+  while (picked.length < ROUNDS && queues.some(q => q.length)) {
+    for (const q of shuffle(queues)) {
+      if (picked.length >= ROUNDS) break;
+      if (q.length) picked.push(q.shift());
+    }
   }
-  return picked;
+  return shuffle(picked);
 }
 
 function makeChoices(song, pool, mode) {
@@ -535,11 +621,12 @@ function renderSongList(list) {
       <img alt="" loading="lazy">
       <div class="song-meta"><b></b><span></span></div>
       <span class="song-pts">${r.points > 0 ? "+" + r.points : "0"}</span>
-      <a class="song-link" target="_blank" rel="noopener">ฟังเต็ม ↗</a>`;
+      <a class="song-link" target="_blank" rel="noopener"></a>`;
     li.querySelector("img").src = r.song.art;
     li.querySelector("b").textContent = r.song.title;
     li.querySelector(".song-meta span").textContent = r.song.artist;
     li.querySelector("a").href = r.song.url;
+    li.querySelector("a").textContent = String(r.song.id).startsWith("dz") ? "ฟังบน Deezer ↗" : "ฟังบน Apple Music ↗";
     list.appendChild(li);
   }
 }
