@@ -1,4 +1,5 @@
 // หมวดหมู่เพลง: แต่ละหมวดคือรายชื่อศิลปิน (ชื่อต้องตรงกับที่ iTunes ประเทศไทยใช้ ส่วนใหญ่เป็นอักษรอังกฤษ)
+// ใส่ชื่อสำรองหลัง | ได้ สำหรับค้นใน Deezer ที่ใช้ชื่อภาษาไทย เช่น "Tai Orathai|ต่าย อรทัย"
 const CATEGORIES = [
   {
     id: "hits", name: "ฮิตติดชาร์ต", emoji: "🔥", color: "#ff4d6d",
@@ -9,7 +10,7 @@ const CATEGORIES = [
   {
     id: "pop", name: "ป๊อปไทย", emoji: "🎤", color: "#f59e0b",
     desc: "นักร้องป๊อปขวัญใจคนไทย",
-    artists: ["Palmy", "Bird Thongchai", "Stamp", "Ink Waruntorn", "Getsunova", "Pop Pongkool", "Lula",
+    artists: ["Palmy", "Bird Thongchai|เบิร์ด ธงไชย", "Stamp", "Ink Waruntorn", "Getsunova", "Pop Pongkool", "Lula",
       "Da Endorphine", "Boy Imagine", "Earth Patravee", "Violette Wautier", "Atom Chanakan", "Ben Chalatit"],
   },
   {
@@ -32,14 +33,14 @@ const CATEGORIES = [
   {
     id: "retro", name: "ยุค 90s–2000s", emoji: "📼", color: "#06b6d4",
     desc: "เพลงในตำนานที่ได้ยินแล้วนึกถึงวันวาน",
-    artists: ["Bird Thongchai", "Mai Charoenpura", "Tata Young", "Christina Aguilar", "Asanee & Wasan",
+    artists: ["Bird Thongchai|เบิร์ด ธงไชย", "Mai Charoenpura", "Tata Young", "Christina Aguilar", "Asanee & Wasan|อัสนี & วสันต์",
       "Carabao", "Sek Loso", "Silly Fools", "Moderndog", "Pause", "Jetset'er", "Groove Riders", "Lomosonic"],
   },
   {
     id: "lukthung", name: "ลูกทุ่ง & หมอลำ", emoji: "🌾", color: "#eab308",
     desc: "เพลงลูกทุ่ง หมอลำ และเพื่อชีวิต",
-    artists: ["Tai Orathai", "Pai Pongsathon", "Monkan Kankoon", "Mike Piromporn", "Jintara Poonlarp",
-      "Yinglee Srijumpol", "Bowling Manida", "Takkatan Chonlada", "Siriporn Umpaipong", "Pongsit Kampee",
+    artists: ["Tai Orathai|ต่าย อรทัย", "Pai Pongsathon|ไผ่ พงศธร", "Monkan Kankoon|มนต์แคน แก่นคูน", "Mike Piromporn|ไมค์ ภิรมย์พร", "Jintara Poonlarp|จินตหรา พูนลาภ",
+      "Yinglee Srijumpol|หญิงลี ศรีจุมพล", "Bowling Manida|โบว์ลิ่ง มานิดา", "Takkatan Chonlada|ตั๊กแตน ชลดา", "Siriporn Umpaipong|ศิริพร อำไพพงษ์", "Pongsit Kampee",
       "Carabao", "Boy Peacemaker"],
   },
 ];
