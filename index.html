@@ -27,7 +27,21 @@
         <button class="mode-btn" data-mode="artist" role="radio" aria-checked="false">ทายศิลปิน</button>
       </div>
 
-      <h2 class="section-title">เลือกหมวด</h2>
+      <section id="mpSection" class="mp-card">
+        <h2>👥 เล่นกับเพื่อน</h2>
+        <p class="hint">สร้างห้องแล้วส่งลิงก์ให้เพื่อน ทุกคนฟังเพลงเดียวกันพร้อมกัน แข่งกันตอบให้เร็วที่สุด</p>
+        <input id="mpName" class="text-input" type="text" maxlength="20" placeholder="ชื่อของคุณ" autocomplete="nickname">
+        <div class="mp-actions">
+          <button type="button" class="btn primary" id="createRoomBtn">สร้างห้อง</button>
+          <form id="joinForm" class="join-form">
+            <input id="roomCodeInput" class="text-input code-input" type="text" maxlength="6" placeholder="รหัสห้อง" autocomplete="off">
+            <button type="submit" class="btn ghost">เข้าห้อง</button>
+          </form>
+        </div>
+        <p class="mp-disabled-note">โหมดนี้ยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า Supabase)</p>
+      </section>
+
+      <h2 class="section-title">เล่นคนเดียว · เลือกหมวด</h2>
       <div id="categoryGrid" class="category-grid"></div>
 
       <h2 class="section-title">หรือเลือกศิลปินเอง</h2>
@@ -66,6 +80,55 @@
 
       <div class="choices" id="choices"></div>
       <button class="btn ghost" id="nextBtn" hidden>ข้อต่อไป →</button>
+      <ol class="live-board" id="liveBoard" hidden></ol>
+    </section>
+
+    <!-- ห้องรอ -->
+    <section id="screen-lobby" class="screen">
+      <div class="lobby-head">
+        <p class="result-label">รหัสห้อง</p>
+        <p class="room-code" id="lobbyCode">-----</p>
+        <div class="result-actions">
+          <button class="btn primary" id="copyLinkBtn">คัดลอกลิงก์ชวนเพื่อน</button>
+          <button class="btn ghost" id="leaveRoomBtn">ออกจากห้อง</button>
+        </div>
+      </div>
+
+      <h2 class="section-title">ผู้เล่น · <span id="playerCount">0 คน</span></h2>
+      <ul class="player-list" id="playerList"></ul>
+
+      <div id="lobbyHost">
+        <div class="mode-switch" role="radiogroup" aria-label="โหมดการเล่น">
+          <button class="mode-btn active" data-mode="title" role="radio" aria-checked="true">ทายชื่อเพลง</button>
+          <button class="mode-btn" data-mode="artist" role="radio" aria-checked="false">ทายศิลปิน</button>
+        </div>
+        <h2 class="section-title">เลือกหมวดเพื่อเริ่มเกม</h2>
+        <div id="lobbyCategoryGrid" class="category-grid"></div>
+        <form id="lobbyCustomForm" class="custom-form" style="margin-top:14px">
+          <input id="lobbyCustomInput" type="text" placeholder="หรือพิมพ์ศิลปินเอง เช่น Bodyslam, Palmy" autocomplete="off">
+          <button type="submit" class="btn primary">เริ่มเกม</button>
+        </form>
+      </div>
+
+      <div id="lobbyGuest" class="lobby-wait">
+        <div class="eq"><i></i><i></i><i></i><i></i><i></i></div>
+        <p id="lobbyStatus">รอโฮสต์เลือกหมวดเพลง...</p>
+      </div>
+    </section>
+
+    <!-- สรุปผลในห้อง -->
+    <section id="screen-mpresult" class="screen">
+      <div class="result-head">
+        <p class="result-score" id="mpResultTitle">จบเกม</p>
+      </div>
+      <ol class="rank-list" id="rankList"></ol>
+      <div class="result-actions" style="margin-top:18px">
+        <button class="btn primary" id="mpAgainBtn">เล่นอีกรอบ</button>
+        <p class="hint" id="mpWaitText">รอโฮสต์เริ่มรอบใหม่...</p>
+        <button class="btn ghost" id="mpLeaveBtn">ออกจากห้อง</button>
+      </div>
+      <h2 class="section-title">เพลงในรอบนี้</h2>
+      <ol class="song-list" id="mpSongList"></ol>
     </section>
 
     <!-- สรุป -->
@@ -86,7 +149,10 @@
 
   <footer class="foot">ตัวอย่างเพลงจาก Apple Music / iTunes · ฟังเพลงเต็มได้ที่ลิงก์ในหน้าสรุป</footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
   <script src="categories.js"></script>
   <script src="app.js"></script>
+  <script src="multiplayer.js"></script>
 </body>
 </html>

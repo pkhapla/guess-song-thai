@@ -132,9 +132,9 @@ function setBest(source, mode, score) {
 // ---------- state ----------
 
 const state = {
-  mode: "title",       // "title" | "artist"
+  mode: "title",       // โหมดที่เลือกไว้: "title" | "artist"
+  playMode: "title",   // โหมดที่ใช้จริงในเกมนี้
   source: null,        // { id, label, artists[] }
-  pool: [],
   rounds: [],
   index: 0,
   score: 0,
@@ -143,24 +143,28 @@ const state = {
   timerStart: 0,
   rafId: 0,
   revealTimer: 0,
+  onPlaying: null,
+  multi: false,        // true เมื่อเล่นในห้องกับเพื่อน (ควบคุมโดย multiplayer.js)
 };
 
-let audio = null; // สร้างครั้งเดียวตอนผู้เล่นกดเริ่ม (กัน autoplay block บนมือถือ)
+let audio = null; // ใช้ element เดียวตลอดเกม (กัน autoplay block บนมือถือ)
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
+// ต้องเรียกภายใน user gesture (คลิก) เพื่อ "ปลดล็อก" เสียง
 function ensureAudio() {
   if (!audio) {
     audio = new Audio();
     audio.preload = "auto";
   }
-  // "ปลดล็อก" เสียงภายใน user gesture
-  audio.play().catch(() => {});
-  audio.pause();
+  if (!audio.src || audio.src === SILENT_WAV) {
+    audio.src = SILENT_WAV;
+    audio.play().catch(() => {});
+  }
 }
 
 // ---------- home ----------
 
-function renderCategories() {
-  const grid = $("#categoryGrid");
+function renderCategories(grid = $("#categoryGrid"), onPick = source => startGame(source)) {
   grid.innerHTML = "";
   for (const c of CATEGORIES) {
     const btn = document.createElement("button");
@@ -176,7 +180,7 @@ function renderCategories() {
     btn.querySelector(".cat-desc").textContent = c.desc;
     btn.addEventListener("click", () => {
       ensureAudio();
-      startGame({ id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists });
+      onPick({ id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists });
     });
     grid.appendChild(btn);
   }
@@ -194,22 +198,26 @@ function setMode(mode) {
 
 document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
+function parseCustom(input) {
+  const artists = input.value.split(",").map(s => s.trim()).filter(Boolean);
+  if (!artists.length) { input.focus(); return null; }
+  return { id: "custom:" + artists.map(a => a.toLowerCase()).sort().join("|"), label: "🎧 " + artists.join(", "), artists, custom: true };
+}
+
 $("#customForm").addEventListener("submit", e => {
   e.preventDefault();
-  const artists = $("#customInput").value.split(",").map(s => s.trim()).filter(Boolean);
-  if (!artists.length) { $("#customInput").focus(); return; }
+  const source = parseCustom($("#customInput"));
+  if (!source) return;
   ensureAudio();
-  startGame({ id: "custom:" + artists.map(a => a.toLowerCase()).sort().join("|"), label: "🎧 " + artists.join(", "), artists, custom: true });
+  startGame(source);
 });
 
 // ---------- game setup ----------
 
 function pickRounds(pool) {
   // เลือกเพลงให้หลากหลาย: ศิลปินละไม่เกิน 2 เพลง (ถ้าทำได้)
-  const byArtist = {};
-  for (const t of shuffle(pool)) (byArtist[t.artist] ||= []).push(t);
-  const artists = Object.keys(byArtist);
-  const maxPer = artists.length >= 5 ? 2 : ROUNDS;
+  const artists = new Set(pool.map(t => t.artist));
+  const maxPer = artists.size >= 5 ? 2 : ROUNDS;
   const picked = [];
   const count = {};
   for (const t of shuffle(pool)) {
@@ -234,8 +242,8 @@ function makeChoices(song, pool, mode) {
   return shuffle([song.title, ...new Set(titles)].slice(0, 4));
 }
 
-async function startGame(source) {
-  state.source = source;
+// ดึงเพลงและสร้างโจทย์ 10 ข้อ คืนค่า { rounds, mode } หรือ null ถ้าเพลงไม่พอ
+async function loadRounds(source, wantedMode) {
   showScreen("loading");
   $("#loadingText").textContent = "กำลังรวบรวมเพลง...";
 
@@ -245,32 +253,43 @@ async function startGame(source) {
   });
   const uniqueArtists = new Set(pool.map(t => t.artist)).size;
 
-  let mode = state.mode;
+  let mode = wantedMode;
   if (mode === "artist" && uniqueArtists < 4) {
-    if (!source.custom) mode = "title";
-    else {
-      alert("โหมดทายศิลปินต้องมีอย่างน้อย 4 ศิลปิน — จะสลับเป็นโหมดทายชื่อเพลงให้นะ");
-      mode = "title";
-    }
+    if (source.custom) alert("โหมดทายศิลปินต้องมีอย่างน้อย 4 ศิลปิน — จะสลับเป็นโหมดทายชื่อเพลงให้นะ");
+    mode = "title";
   }
   if (pool.length < ROUNDS + 3) {
     alert(pool.length === 0
       ? "หาเพลงไม่เจอ ลองพิมพ์ชื่อศิลปินเป็นภาษาอังกฤษ เช่น Bodyslam, Palmy หรือรอสักครู่แล้วลองใหม่"
       : `เจอเพลงแค่ ${pool.length} เพลง ไม่พอเล่น 10 ข้อ ลองเพิ่มศิลปินอีกคน`);
-    showScreen("home");
-    return;
+    return null;
   }
+  const rounds = pickRounds(pool).map(song => ({ song, choices: makeChoices(song, pool, mode) }));
+  return { rounds, mode };
+}
 
-  state.pool = pool;
+// เริ่มเกมจากโจทย์ที่มีอยู่แล้ว (ใช้ทั้งเล่นคนเดียวและเล่นในห้อง)
+function beginRounds(rounds, mode, label, { autoplay = true } = {}) {
+  state.rounds = rounds.map(r => ({ ...r, picked: null, points: 0 }));
   state.playMode = mode;
-  state.rounds = pickRounds(pool).map(song => ({ song, choices: makeChoices(song, pool, mode), picked: null, points: 0 }));
   state.index = 0;
   state.score = 0;
   state.streak = 0;
-  $("#categoryLabel").textContent = source.label;
+  state.answered = true;
+  $("#categoryLabel").textContent = label;
   $("#scoreLabel").textContent = "0";
+  $("#choices").innerHTML = "";
+  $("#revealText").textContent = state.multi ? "เตรียมตัว..." : "";
   showScreen("game");
-  playRound();
+  if (autoplay) playRound();
+}
+
+async function startGame(source) {
+  state.multi = false;
+  state.source = source;
+  const loaded = await loadRounds(source, state.mode);
+  if (!loaded) { showScreen("home"); return; }
+  beginRounds(loaded.rounds, loaded.mode, source.label);
 }
 
 // ---------- game loop ----------
@@ -345,14 +364,14 @@ function tick() {
   state.rafId = requestAnimationFrame(loop);
 }
 
-function answer(value) {
-  if (state.answered) return;
+// บันทึกคำตอบและคิดคะแนน
+function recordAnswer(value) {
   state.answered = true;
   cancelAnimationFrame(state.rafId);
 
   const round = state.rounds[state.index];
   const correctValue = state.playMode === "artist" ? round.song.artist : round.song.title;
-  const elapsed = (performance.now() - state.timerStart) / 1000;
+  const elapsed = state.timerStart ? (performance.now() - state.timerStart) / 1000 : ROUND_SECONDS;
   const ok = value === correctValue;
 
   round.picked = value;
@@ -365,9 +384,36 @@ function answer(value) {
   } else {
     state.streak = 0;
   }
+  document.querySelectorAll(".choice").forEach(b => (b.disabled = true));
+  return round;
+}
+
+function answer(value) {
+  if (state.answered) return;
+  const round = recordAnswer(value);
+  if (state.multi) {
+    // เล่นในห้อง: รอทุกคนตอบก่อนค่อยเฉลย
+    document.querySelectorAll(".choice").forEach(b => b.classList.toggle("selected", b.dataset.value === value));
+    $("#revealText").textContent = value === null ? "⏰ หมดเวลา · รอเพื่อน..." : "ส่งคำตอบแล้ว · รอเพื่อน...";
+    mpSendAnswer(state.index, round.points);
+    return;
+  }
+  revealRound();
+  $("#nextBtn").hidden = false;
+  $("#nextBtn").textContent = state.index + 1 < state.rounds.length ? "ข้อต่อไป →" : "ดูผลคะแนน →";
+  state.revealTimer = setTimeout(next, REVEAL_MS + 1200);
+}
+
+// เฉลยคำตอบของข้อปัจจุบัน
+function revealRound() {
+  const round = state.rounds[state.index];
+  const value = round.picked;
+  const correctValue = state.playMode === "artist" ? round.song.artist : round.song.title;
+  const ok = round.points > 0;
 
   document.querySelectorAll(".choice").forEach(b => {
     b.disabled = true;
+    b.classList.remove("selected");
     if (b.dataset.value === correctValue) b.classList.add("correct");
     else if (b.dataset.value === value) b.classList.add("wrong");
     else b.classList.add("dim");
@@ -382,10 +428,6 @@ function answer(value) {
   const reveal = $("#revealText");
   reveal.innerHTML = label;
   reveal.append(`${round.song.title} — ${round.song.artist}`);
-
-  $("#nextBtn").hidden = false;
-  $("#nextBtn").textContent = state.index + 1 < state.rounds.length ? "ข้อต่อไป →" : "ดูผลคะแนน →";
-  state.revealTimer = setTimeout(next, REVEAL_MS + 1200);
 }
 
 function next() {
@@ -399,11 +441,12 @@ $("#nextBtn").addEventListener("click", next);
 
 document.addEventListener("keydown", e => {
   if (!$("#screen-game").classList.contains("active")) return;
+  if (e.target.tagName === "INPUT") return;
   const n = Number(e.key);
   if (n >= 1 && n <= 4 && !state.answered) {
     const b = document.querySelectorAll(".choice")[n - 1];
     if (b && !b.disabled) b.click();
-  } else if ((e.key === "Enter" || e.key === " ") && state.answered) {
+  } else if ((e.key === "Enter" || e.key === " ") && state.answered && !state.multi && !$("#nextBtn").hidden) {
     e.preventDefault();
     next();
   }
@@ -411,18 +454,7 @@ document.addEventListener("keydown", e => {
 
 // ---------- result ----------
 
-function showResult() {
-  audio.pause();
-  const correct = state.rounds.filter(r => r.points > 0).length;
-  const { id } = state.source;
-  const prevBest = getBest(id, state.playMode);
-  const isBest = state.score > prevBest;
-  if (isBest) setBest(id, state.playMode, state.score);
-
-  $("#finalScore").textContent = state.score.toLocaleString();
-  $("#finalSub").textContent = `ตอบถูก ${correct}/${state.rounds.length} ข้อ` + (isBest && state.score > 0 ? " · 🏆 สถิติใหม่!" : prevBest ? ` · สถิติ ${prevBest.toLocaleString()}` : "");
-
-  const list = $("#songList");
+function renderSongList(list) {
   list.innerHTML = "";
   for (const r of state.rounds) {
     const li = document.createElement("li");
@@ -438,6 +470,19 @@ function showResult() {
     li.querySelector("a").href = r.song.url;
     list.appendChild(li);
   }
+}
+
+function showResult() {
+  audio.pause();
+  const correct = state.rounds.filter(r => r.points > 0).length;
+  const { id } = state.source;
+  const prevBest = getBest(id, state.playMode);
+  const isBest = state.score > prevBest;
+  if (isBest) setBest(id, state.playMode, state.score);
+
+  $("#finalScore").textContent = state.score.toLocaleString();
+  $("#finalSub").textContent = `ตอบถูก ${correct}/${state.rounds.length} ข้อ` + (isBest && state.score > 0 ? " · 🏆 สถิติใหม่!" : prevBest ? ` · สถิติ ${prevBest.toLocaleString()}` : "");
+  renderSongList($("#songList"));
   showScreen("result");
 }
 
@@ -445,11 +490,16 @@ $("#againBtn").addEventListener("click", () => { ensureAudio(); startGame(state.
 $("#homeBtn").addEventListener("click", goHome);
 $("#homeLink").addEventListener("click", e => { e.preventDefault(); goHome(); });
 
-function goHome() {
+function stopGame() {
   if (audio) audio.pause();
   cancelAnimationFrame(state.rafId);
   clearTimeout(state.revealTimer);
   state.answered = true;
+}
+
+function goHome() {
+  stopGame();
+  mpLeave();
   renderCategories();
   showScreen("home");
 }
