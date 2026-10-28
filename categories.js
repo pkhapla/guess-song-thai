@@ -1,4 +1,5 @@
 // หมวดหมู่เพลง: แต่ละหมวดคือรายชื่อศิลปิน (ชื่อต้องตรงกับที่ iTunes ประเทศไทยใช้ ส่วนใหญ่เป็นอักษรอังกฤษ)
+// years: [ปีเริ่ม, ปีจบ] = หมวดตามยุค เล่นเฉพาะเพลงที่ออกในช่วงปีนั้น (ใช้ปีจาก iTunes)
 // ใส่ชื่อสำรองหลัง | ได้ สำหรับค้นใน Deezer ที่ใช้ชื่อภาษาไทย เช่น "Tai Orathai|ต่าย อรทัย"
 const CATEGORIES = [
   {
@@ -31,10 +32,32 @@ const CATEGORIES = [
       "Mild", "Instinct", "Pause", "Jetset'er", "Moderndog", "Gene Kasidit"],
   },
   {
-    id: "retro", name: "ยุค 90s–2000s", emoji: "📼", color: "#06b6d4",
-    desc: "เพลงในตำนานที่ได้ยินแล้วนึกถึงวันวาน",
+    id: "retro", name: "ยุค 90s", emoji: "📼", color: "#06b6d4", years: [1985, 1999],
+    desc: "เพลงในตำนานปี 1985–1999",
     artists: ["Bird Thongchai|เบิร์ด ธงไชย", "Mai Charoenpura", "Tata Young", "Christina Aguilar", "Asanee & Wasan|อัสนี & วสันต์",
-      "Carabao", "Sek Loso", "Silly Fools", "Moderndog", "Pause", "Jetset'er", "Groove Riders", "Lomosonic"],
+      "Carabao", "Silly Fools", "Pause", "Jintara Poonlarp|จินตหรา พูนลาภ"],
+  },
+  {
+    id: "y2000s", name: "ยุค 2000s", emoji: "💿", color: "#3b82f6", years: [2000, 2009],
+    desc: "เพลงฮิตปี 2000–2009 ยุคเทปคาสเซ็ตถึงซีดี",
+    artists: ["Bodyslam", "Potato", "Clash", "Big Ass", "Silly Fools", "Sek Loso", "Tata Young", "Palmy", "Labanoon",
+      "Zeal", "Da Endorphine", "Ebola", "Retrospect", "Sweet Mullet", "Paradox", "Slot Machine", "Mild", "Scrubb",
+      "Tai Orathai|ต่าย อรทัย", "Pai Pongsathon|ไผ่ พงศธร", "Bird Thongchai|เบิร์ด ธงไชย"],
+  },
+  {
+    id: "y2010s", name: "ยุค 2010s", emoji: "📱", color: "#8b5cf6", years: [2010, 2019],
+    desc: "เพลงฮิตปี 2010–2019",
+    artists: ["Cocktail", "Getsunova", "Stamp", "Ink Waruntorn", "Polycat", "Scrubb", "Lipta", "Bodyslam", "Potato",
+      "Labanoon", "Klear", "Musketeers", "The Toys", "Atom Chanakan", "Whal & Dolph", "Pop Pongkool", "Tilly Birds",
+      "BNK48", "Fellow Fellow", "Yinglee Srijumpol|หญิงลี ศรีจุมพล", "Takkatan Chonlada|ตั๊กแตน ชลดา",
+      "Tai Orathai|ต่าย อรทัย", "Phum Viphurit", "Boy Peacemaker", "Big Ass"],
+  },
+  {
+    id: "y2020s", name: "ยุค 2020s", emoji: "🎧", color: "#ec4899", years: [2020, 2029],
+    desc: "เพลงใหม่ตั้งแต่ปี 2020 ถึงปัจจุบัน",
+    artists: ["Tilly Birds", "Three Man Down", "4EVE", "PROXIE", "BUS", "PiXXiE", "LYKN", "ATLAS", "Jeff Satur",
+      "Billkin", "PP Krit", "Bowkylion", "Jaonaay", "Nont Tanont", "Wanyai", "Lipta", "Earth Patravee", "Boy Imagine",
+      "Atom Chanakan", "Violette Wautier", "Cocktail", "Getsunova", "The Toys"],
   },
   {
     id: "lukthung", name: "ลูกทุ่ง & หมอลำ", emoji: "🌾", color: "#eab308",

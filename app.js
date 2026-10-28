@@ -11,7 +11,7 @@ const VERSION_WORDS = /[\(\[-][^\)\]]*\b(live|acoustic|remix|version|ver\.?|sped
 // ---------- fetch layer: iTunes + Deezer ----------
 
 const memoryCache = {};
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 function storageGet(key) {
   try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; }
@@ -65,6 +65,7 @@ async function fetchItunes(term) {
       key: titleKey(t.trackName),
       artist: name,
       art: (t.artworkUrl100 || "").replace("100x100", "400x400"),
+      year: Number((t.releaseDate || "").slice(0, 4)) || null,
       preview: t.previewUrl,
       url: t.trackViewUrl,
     }));
@@ -154,13 +155,16 @@ async function fetchArtist(term) {
   // ใช้ชื่อศิลปินจาก iTunes เป็นหลัก แล้วเติมเพลงจาก Deezer ที่ยังไม่มี (เพลงซ้ำใช้ของ iTunes เพราะลิงก์ไม่หมดอายุ)
   // เพลงที่อยู่ในเพลงยอดนิยมของ Deezer ติดป้าย hot ไว้ ให้สุ่มเป็นโจทย์ก่อน
   const hotKeys = new Set(dz.tracks.map(t => t.key));
+  // ปีที่ออก: เพลงเดียวกันอาจอยู่หลายอัลบั้ม (รวมฮิต/รีมาสเตอร์) ใช้ปีที่เก่าที่สุด
+  const years = {};
+  for (const t of it.tracks) if (t.year) years[t.key] = Math.min(years[t.key] || 9999, t.year);
   const name = it.name || dz.name || main;
   const seen = new Set();
   const tracks = [];
   for (const t of [...it.tracks, ...dz.tracks]) {
     if (!t.key || seen.has(t.key)) continue;
     seen.add(t.key);
-    tracks.push({ ...t, artist: name, hot: hotKeys.has(t.key) });
+    tracks.push({ ...t, artist: name, hot: hotKeys.has(t.key), year: years[t.key] || null });
   }
   const out = { name, tracks, expires: previewExpiry(tracks) };
   storageSet(cacheKey, out);
@@ -258,7 +262,7 @@ function ensureAudio() {
 // ---------- home ----------
 
 function categorySource(c) {
-  return { id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists };
+  return { id: c.id, label: `${c.emoji} ${c.name}`, artists: c.artists, years: c.years };
 }
 
 // onRandom: ถ้าไม่ส่งมา จะสุ่มหมวดแล้วเล่นคนเดียว (ห้องเล่นกับเพื่อนส่งของตัวเองมาเพื่อให้ทุกคนเห็นการสุ่ม)
@@ -413,10 +417,16 @@ async function loadRounds(source, wantedMode) {
   showScreen("loading");
   $("#loadingText").textContent = "กำลังรวบรวมเพลง...";
 
-  const artists = source.artists.length > ARTISTS_PER_GAME ? sample(source.artists, ARTISTS_PER_GAME) : source.artists;
-  const pool = await buildPool(artists, (d, n) => {
+  // หมวดตามยุคต้องกรองเพลงตามปี เพลงเหลือน้อยลง เลยดึงศิลปินเพิ่ม
+  const perGame = source.years ? ARTISTS_PER_GAME + 3 : ARTISTS_PER_GAME;
+  const artists = source.artists.length > perGame ? sample(source.artists, perGame) : source.artists;
+  let pool = await buildPool(artists, (d, n) => {
     $("#loadingText").textContent = `กำลังรวบรวมเพลง... (${d}/${n})`;
   });
+  if (source.years) {
+    const [from, to] = source.years;
+    pool = pool.filter(t => t.year && t.year >= from && t.year <= to);
+  }
   const uniqueArtists = new Set(pool.map(t => t.artist)).size;
 
   let mode = wantedMode;
@@ -632,7 +642,7 @@ function renderSongList(list) {
       <a class="song-link" target="_blank" rel="noopener"></a>`;
     li.querySelector("img").src = r.song.art;
     li.querySelector("b").textContent = r.song.title;
-    li.querySelector(".song-meta span").textContent = r.song.artist;
+    li.querySelector(".song-meta span").textContent = r.song.artist + (r.song.year ? ` · ${r.song.year}` : "");
     li.querySelector("a").href = r.song.url;
     li.querySelector("a").textContent = String(r.song.id).startsWith("dz") ? "ฟังบน Deezer ↗" : "ฟังบน Apple Music ↗";
     list.appendChild(li);
