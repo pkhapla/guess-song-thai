@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ทายเพลงไทย</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#" class="logo" id="homeLink">🎵 ทายเพลง<span>ไทย</span></a>
+  </header>
+
+  <main>
+    <!-- หน้าแรก -->
+    <section id="screen-home" class="screen active">
+      <div class="hero">
+        <h1>ฟังแค่ไม่กี่วิ<br><em>ทายถูกไหม?</em></h1>
+        <p>เกมทายเพลงไทย 10 ข้อ ตอบเร็วยิ่งได้คะแนนเยอะ</p>
+      </div>
+
+      <div class="mode-switch" role="radiogroup" aria-label="โหมดการเล่น">
+        <button class="mode-btn active" data-mode="title" role="radio" aria-checked="true">ทายชื่อเพลง</button>
+        <button class="mode-btn" data-mode="artist" role="radio" aria-checked="false">ทายศิลปิน</button>
+      </div>
+
+      <h2 class="section-title">เลือกหมวด</h2>
+      <div id="categoryGrid" class="category-grid"></div>
+
+      <h2 class="section-title">หรือเลือกศิลปินเอง</h2>
+      <form id="customForm" class="custom-form">
+        <input id="customInput" type="text" placeholder="เช่น Bodyslam, Palmy, Tilly Birds" autocomplete="off">
+        <button type="submit" class="btn primary">เล่นเลย</button>
+      </form>
+      <p class="hint">ใส่หลายศิลปินได้ คั่นด้วยเครื่องหมายจุลภาค ( , ) — ถ้าใส่ศิลปินเดียวจะเล่นได้แค่โหมดทายชื่อเพลง</p>
+    </section>
+
+    <!-- โหลด -->
+    <section id="screen-loading" class="screen">
+      <div class="loader">
+        <div class="eq"><i></i><i></i><i></i><i></i><i></i></div>
+        <p id="loadingText">กำลังรวบรวมเพลง...</p>
+      </div>
+    </section>
+
+    <!-- เกม -->
+    <section id="screen-game" class="screen">
+      <div class="game-head">
+        <div class="pill" id="roundLabel">ข้อ 1/10</div>
+        <div class="pill" id="categoryLabel"></div>
+        <div class="pill score">⭐ <span id="scoreLabel">0</span></div>
+      </div>
+
+      <div class="player">
+        <div class="disc" id="disc">
+          <img id="artwork" alt="">
+          <div class="disc-q" id="discQ">?</div>
+        </div>
+        <div class="timer"><div class="timer-bar" id="timerBar"></div></div>
+        <p class="question" id="questionText">เพลงนี้ชื่ออะไร?</p>
+        <p class="reveal" id="revealText"></p>
+      </div>
+
+      <div class="choices" id="choices"></div>
+      <button class="btn ghost" id="nextBtn" hidden>ข้อต่อไป →</button>
+    </section>
+
+    <!-- สรุป -->
+    <section id="screen-result" class="screen">
+      <div class="result-head">
+        <p class="result-label">คะแนนรวม</p>
+        <p class="result-score" id="finalScore">0</p>
+        <p class="result-sub" id="finalSub"></p>
+        <div class="result-actions">
+          <button class="btn primary" id="againBtn">เล่นอีกครั้ง</button>
+          <button class="btn ghost" id="homeBtn">เลือกหมวดใหม่</button>
+        </div>
+      </div>
+      <h2 class="section-title">เพลงในรอบนี้</h2>
+      <ol class="song-list" id="songList"></ol>
+    </section>
+  </main>
+
+  <footer class="foot">ตัวอย่างเพลงจาก Apple Music / iTunes · ฟังเพลงเต็มได้ที่ลิงก์ในหน้าสรุป</footer>
+
+  <script src="categories.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
