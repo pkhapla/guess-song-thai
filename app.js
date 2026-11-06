@@ -483,7 +483,9 @@ function playRound() {
 
   const disc = $("#disc");
   disc.classList.remove("revealed", "spin");
-  $("#artwork").src = song.art;
+  // ห้ามใส่ปกเพลงก่อนเฉลย ไม่งั้นปกใหม่จะโผล่ตอนปกเก่ากำลังจางหาย (เฉลยคำตอบ)
+  $("#artwork").removeAttribute("src");
+  new Image().src = song.art; // โหลดรอไว้ก่อน ตอนเฉลยจะขึ้นทันที
   setTimerBar(1);
 
   const box = $("#choices");
@@ -595,6 +597,7 @@ function revealRound() {
     else b.classList.add("dim");
   });
 
+  $("#artwork").src = round.song.art;
   $("#disc").classList.remove("spin");
   $("#disc").classList.add("revealed");
   $("#scoreLabel").textContent = state.score.toLocaleString();
